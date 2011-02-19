@@ -39,6 +39,7 @@
     /* Prototypes */
 static void daemon_loop(void);
 static void accept_connection(LOCAL_OPTIONS *);
+static void handle_control_connection(void);
 static void get_limits(void); /* setup global max_clients and max_fds */
 #if !defined (USE_WIN32) && !defined (__vms)
 static void drop_privileges(void);
@@ -54,6 +55,8 @@ static void signal_handler(int);
 #endif
 
 int volatile num_clients=0; /* Current number of clients */
+
+int control_socket_fd; /* Local socket for control messages */
 
     /* Functions */
 
@@ -112,6 +115,9 @@ static void daemon_loop(void) {
 #ifndef USE_WIN32
     s_poll_add(&fds, signal_pipe_init(), 1, 0);
 #endif
+
+    if(!options.control_socket)
+	  s_poll_add(&fds, control_socket_fd, 1, 0);
 
     if(!local_options.next) {
         s_log(LOG_ERR, "No connections defined in config file");
@@ -178,9 +184,26 @@ static void daemon_loop(void) {
             for(opt=local_options.next; opt; opt=opt->next)
                 if(s_poll_canread(&fds, opt->fd))
                     accept_connection(opt);
+			if(!options.control_socket)
+			  if(s_poll_canread(&fds, control_socket_fd))
+				handle_control_connection();
         }
     }
     s_log(LOG_ERR, "INTERNAL ERROR: End of infinite loop 8-)");
+}
+
+static void handle_control_connection(){
+  ssize_t n;
+  struct sockaddr_un from;
+  socklen_t fromlen;
+  char buf[1024];
+
+  bzero(buf, sizeof(buf));
+  if ((n = recvfrom(control_socket_fd, buf, sizeof(buf), 0, (struct sockaddr*) &from, sizeof(fromlen))) < 0){
+	s_log(LOG_ERR, "Failed to read a message on the control socket");
+	return;
+  }
+  s_log(LOG_DEBUG, "Received a control message: %s", buf);
 }
 
 static void accept_connection(LOCAL_OPTIONS *opt) {
@@ -411,8 +434,6 @@ static void delete_pid(void) {
 }
 
 
-int control_socket_fd;
-
 static void create_control_socket(void) {
     int pf;
     char control_socket[STRLEN];
@@ -441,11 +462,7 @@ static void create_control_socket(void) {
 	  sockerror("control_socket bind");
 	  exit(1);
 	}
-	if (listen(control_socket_fd, 5) < 0){
-	  sockerror("control_socket listen");
-	  exit(1);
-	}
-	s_log(LOG_DEBUG, "Listening on control socket %s", options.control_socket);
+	s_log(LOG_DEBUG, "Receiving commands on control socket %s", options.control_socket);
 }
 
 static void signal_handler(int sig) { /* signal handler */
