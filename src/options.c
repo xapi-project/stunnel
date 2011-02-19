@@ -270,6 +270,28 @@ static char *global_options(CMD cmd, char *opt, char *arg) {
         break;
     }
 #endif
+	/* control socket */
+#ifndef USE_WIN32
+	switch(cmd) {
+	case CMD_INIT:
+	  options.control_socket=CONTROL_SOCKET;
+	  break;
+	case CMD_EXEC:
+	  if(strcasecmp(opt, "control_socket"))
+		break;
+	  if(arg[0]) /* is argument not empty? */
+		options.control_socket=stralloc(arg);
+	  else
+		options.pidfile=NULL; /* empty -> do not create a pid file */
+	  return NULL; /* OK */
+	case CMD_DEFAULT:
+	  log_raw("%-15s = %s", "control_socket", CONTROL_SOCKET);
+	  break;
+	case CMD_HELP:
+	  log_raw("%15s = control socket (empty to disable creating)", "control_socket");
+	  break;
+	}
+#endif
 
     /* RNDbytes */
     switch(cmd) {

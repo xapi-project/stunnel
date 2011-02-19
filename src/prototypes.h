@@ -111,6 +111,7 @@ typedef struct {
 #endif
     unsigned long dpid;
     char *pidfile;
+    char *control_socket;
     char *setuid_user;
     char *setgid_group;
 #endif

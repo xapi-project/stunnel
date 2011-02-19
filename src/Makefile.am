@@ -28,7 +28,7 @@ INCLUDES = -I/usr/kerberos/include
 
 # Additional compiler flags
 
-AM_CPPFLAGS = -DLIBDIR='"$(libdir)"' -DCONFDIR='"$(sysconfdir)/stunnel"' -DPIDFILE='"$(prefix)/var/run/stunnel/stunnel.pid"'
+AM_CPPFLAGS = -DLIBDIR='"$(libdir)"' -DCONFDIR='"$(sysconfdir)/stunnel"' -DPIDFILE='"$(prefix)/var/run/stunnel/stunnel.pid"' -DCONTROL_SOCKET='"$(prefix)/var/run/stunnel.ctrl"'
 
 # Win32 executable
 
