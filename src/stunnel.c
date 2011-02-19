@@ -45,6 +45,7 @@ static void drop_privileges(void);
 static void daemonize(void);
 static void create_pid(void);
 static void delete_pid(void);
+static void create_control_socket(void);
 #endif
 
     /* Error/exceptions handling functions */
@@ -155,6 +156,7 @@ static void daemon_loop(void) {
         daemonize();
     drop_privileges();
     create_pid();
+	create_control_socket();
 #endif /* !defined USE_WIN32 && !defined (__vms) */
 
     /* create exec+connect services */
@@ -406,6 +408,44 @@ static void delete_pid(void) {
         return; /* current process is not main daemon process */
     if(unlink(options.pidfile)<0)
         ioerror(options.pidfile); /* not critical */
+}
+
+
+int control_socket_fd;
+
+static void create_control_socket(void) {
+    int pf;
+    char control_socket[STRLEN];
+	struct sockaddr_un addr;
+	
+    if(!options.control_socket) {
+        s_log(LOG_DEBUG, "No control socket being created");
+        return;
+    }
+    if(options.control_socket[0]!='/') {
+        s_log(LOG_ERR, "Control socket (%s) must be full path name", options.control_socket);
+        /* Why?  Because we don't want to confuse by
+           allowing '.', which would be '/' after
+           daemonizing) */
+        exit(1);
+    }
+	unlink(options.control_socket);
+	if ((control_socket_fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0){
+	  sockerror("control_socket");
+	  exit(1);
+	}
+	memset(&addr, 0, sizeof(struct sockaddr_un));
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, options.control_socket, sizeof(addr.sun_path) - 1);
+	if (bind(control_socket_fd, (struct sockaddr *) &addr, sizeof(struct sockaddr_un)) < 0){
+	  sockerror("control_socket bind");
+	  exit(1);
+	}
+	if (listen(control_socket_fd, 5) < 0){
+	  sockerror("control_socket listen");
+	  exit(1);
+	}
+	s_log(LOG_DEBUG, "Listening on control socket %s", options.control_socket);
 }
 
 static void signal_handler(int sig) { /* signal handler */

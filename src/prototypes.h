@@ -195,6 +195,8 @@ typedef struct local_options {
 
 extern LOCAL_OPTIONS local_options;
 
+extern int control_socket_fd;
+
 typedef enum {
     TYPE_NONE, TYPE_FLAG, TYPE_INT, TYPE_LINGER, TYPE_TIMEVAL, TYPE_STRING
 } VAL_TYPE;

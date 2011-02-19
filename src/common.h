@@ -251,6 +251,7 @@ typedef unsigned long u32;
 #include <fcntl.h>
 
 #include <netinet/in.h>  /* struct sockaddr_in */
+#include <sys/un.h>      /* struct sockaddr_un */
 #include <sys/socket.h>  /* getpeername */
 #include <arpa/inet.h>   /* inet_ntoa */
 #include <sys/time.h>    /* select */
