@@ -5,14 +5,16 @@
 common_headers = common.h prototypes.h
 common_sources = file.c client.c log.c options.c protocol.c \
     network.c resolver.c ssl.c ctx.c sthreads.c stunnel.c
+stunnel_ctrl_sources = stunnel-ctrl.c
 unix_sources = pty.c
 shared_sources = env.c
 win32_sources = gui.c resources.h resources.rc stunnel.ico
 
 # Unix executable
 
-sbin_PROGRAMS = stunnel
+sbin_PROGRAMS = stunnel stunnel-ctrl
 stunnel_SOURCES = $(common_headers) $(common_sources) $(unix_sources)
+stunnel_ctrl_SOURCES = $(common_headers) $(stunnel_ctrl_sources)
 
 sbin_SCRIPTS = stunnel3
 

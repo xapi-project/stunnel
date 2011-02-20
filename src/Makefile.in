@@ -42,7 +42,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-sbin_PROGRAMS = stunnel$(EXEEXT)
+sbin_PROGRAMS = stunnel$(EXEEXT) stunnel-ctrl$(EXEEXT)
 EXTRA_PROGRAMS = stunnel.exe$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in \
@@ -79,9 +79,13 @@ am_stunnel_OBJECTS = $(am__objects_2) $(am__objects_3) \
 	$(am__objects_4)
 stunnel_OBJECTS = $(am_stunnel_OBJECTS)
 stunnel_LDADD = $(LDADD)
-am__objects_5 = gui.$(OBJEXT) resources.$(OBJEXT)
+am__objects_5 = stunnel-ctrl.$(OBJEXT)
+am_stunnel_ctrl_OBJECTS = $(am__objects_2) $(am__objects_5)
+stunnel_ctrl_OBJECTS = $(am_stunnel_ctrl_OBJECTS)
+stunnel_ctrl_LDADD = $(LDADD)
+am__objects_6 = gui.$(OBJEXT) resources.$(OBJEXT)
 am_stunnel_exe_OBJECTS = $(am__objects_2) $(am__objects_3) \
-	$(am__objects_5)
+	$(am__objects_6)
 stunnel_exe_OBJECTS = $(am_stunnel_exe_OBJECTS)
 stunnel_exe_LDADD = $(LDADD)
 sbinSCRIPT_INSTALL = $(INSTALL_SCRIPT)
@@ -98,9 +102,9 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
 SOURCES = $(libstunnel_la_SOURCES) $(stunnel_SOURCES) \
-	$(stunnel_exe_SOURCES)
+	$(stunnel_ctrl_SOURCES) $(stunnel_exe_SOURCES)
 DIST_SOURCES = $(libstunnel_la_SOURCES) $(stunnel_SOURCES) \
-	$(stunnel_exe_SOURCES)
+	$(stunnel_ctrl_SOURCES) $(stunnel_exe_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -207,10 +211,12 @@ common_headers = common.h prototypes.h
 common_sources = file.c client.c log.c options.c protocol.c \
     network.c resolver.c ssl.c ctx.c sthreads.c stunnel.c
 
+stunnel_ctrl_sources = stunnel-ctrl.c
 unix_sources = pty.c
 shared_sources = env.c
 win32_sources = gui.c resources.h resources.rc stunnel.ico
 stunnel_SOURCES = $(common_headers) $(common_sources) $(unix_sources)
+stunnel_ctrl_SOURCES = $(common_headers) $(stunnel_ctrl_sources)
 sbin_SCRIPTS = stunnel3
 
 # Unix shared library
@@ -335,6 +341,9 @@ clean-sbinPROGRAMS:
 stunnel$(EXEEXT): $(stunnel_OBJECTS) $(stunnel_DEPENDENCIES) 
 	@rm -f stunnel$(EXEEXT)
 	$(LINK) $(stunnel_LDFLAGS) $(stunnel_OBJECTS) $(stunnel_LDADD) $(LIBS)
+stunnel-ctrl$(EXEEXT): $(stunnel_ctrl_OBJECTS) $(stunnel_ctrl_DEPENDENCIES) 
+	@rm -f stunnel-ctrl$(EXEEXT)
+	$(LINK) $(stunnel_ctrl_LDFLAGS) $(stunnel_ctrl_OBJECTS) $(stunnel_ctrl_LDADD) $(LIBS)
 install-sbinSCRIPTS: $(sbin_SCRIPTS)
 	@$(NORMAL_INSTALL)
 	test -z "$(sbindir)" || $(mkdir_p) "$(DESTDIR)$(sbindir)"
@@ -374,6 +383,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/resolver.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ssl.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sthreads.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stunnel-ctrl.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stunnel.Po@am__quote@
 
 .c.o:
