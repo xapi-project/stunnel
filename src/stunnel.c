@@ -116,9 +116,6 @@ static void daemon_loop(void) {
     s_poll_add(&fds, signal_pipe_init(), 1, 0);
 #endif
 
-    if(!options.control_socket)
-	  s_poll_add(&fds, control_socket_fd, 1, 0);
-
     if(!local_options.next) {
         s_log(LOG_ERR, "No connections defined in config file");
         exit(1);
@@ -165,6 +162,11 @@ static void daemon_loop(void) {
 	create_control_socket();
 #endif /* !defined USE_WIN32 && !defined (__vms) */
 
+    if(options.control_socket){
+	  s_log(LOG_DEBUG, "Adding control fd %d", control_socket_fd);
+	  s_poll_add(&fds, control_socket_fd, 1, 0);
+	}
+
     /* create exec+connect services */
     for(opt=local_options.next; opt; opt=opt->next) {
         if(opt->option.accept) /* skip ordinary (accepting) services */
@@ -184,7 +186,7 @@ static void daemon_loop(void) {
             for(opt=local_options.next; opt; opt=opt->next)
                 if(s_poll_canread(&fds, opt->fd))
                     accept_connection(opt);
-			if(!options.control_socket)
+			if(options.control_socket)
 			  if(s_poll_canread(&fds, control_socket_fd))
 				handle_control_connection();
         }
@@ -192,18 +194,58 @@ static void daemon_loop(void) {
     s_log(LOG_ERR, "INTERNAL ERROR: End of infinite loop 8-)");
 }
 
-static void handle_control_connection(){
+static void handle_control_ping(int s){
   ssize_t n;
-  struct sockaddr_un from;
-  socklen_t fromlen;
   char buf[1024];
 
-  bzero(buf, sizeof(buf));
-  if ((n = recvfrom(control_socket_fd, buf, sizeof(buf), 0, (struct sockaddr*) &from, sizeof(fromlen))) < 0){
-	s_log(LOG_ERR, "Failed to read a message on the control socket");
+  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "PONG");
+  *((uint16_t*)buf) = n;
+  if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
+	s_log(LOG_ERR, "Failed to reply to a message on the control socket: %s", strerror(errno));
 	return;
   }
-  s_log(LOG_DEBUG, "Received a control message: %s", buf);
+}
+
+static void handle_unknown_message(int s){
+  ssize_t n;
+  char buf[1024];
+
+  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "UNKNOWN MESSAGE");
+  *((uint16_t*)buf) = n;
+  if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
+	s_log(LOG_ERR, "Failed to reply to a message on the control socket: %s", strerror(errno));
+	return;
+  }
+}
+
+static void handle_control_connection(){
+  ssize_t n;
+  char buf[1024];
+  struct sockaddr_un addr;
+  socklen_t addrlen;
+  int s;
+
+  s = accept(control_socket_fd, (struct sockaddr*)&addr, &addrlen);
+  if (s < 0) {
+	s_log(LOG_ERR, "Failed to accept a connection on the control socket: %s", strerror(errno));
+	return;
+  }
+
+  bzero(buf, sizeof(buf));
+  if ((n = recv(s, buf, sizeof(buf), 0)) < 0){
+	s_log(LOG_ERR, "Failed to read a message on the control socket (n=%d) fd=%d errno=%s", n, control_socket_fd, strerror(errno));
+	goto out;
+  }
+  s_log(LOG_DEBUG, "Received a control message: %s (length %d)", buf + sizeof(uint16_t), n);
+  
+  if (strcasecmp(buf + sizeof(uint16_t), "ping") == 0){
+	handle_control_ping(s);
+	goto out;
+  }
+  handle_unknown_message(s);
+
+ out:
+  close(s);
 }
 
 static void accept_connection(LOCAL_OPTIONS *opt) {
@@ -435,8 +477,6 @@ static void delete_pid(void) {
 
 
 static void create_control_socket(void) {
-    int pf;
-    char control_socket[STRLEN];
 	struct sockaddr_un addr;
 	
     if(!options.control_socket) {
@@ -451,7 +491,7 @@ static void create_control_socket(void) {
         exit(1);
     }
 	unlink(options.control_socket);
-	if ((control_socket_fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0){
+	if ((control_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0){
 	  sockerror("control_socket");
 	  exit(1);
 	}
@@ -460,6 +500,10 @@ static void create_control_socket(void) {
 	strncpy(addr.sun_path, options.control_socket, sizeof(addr.sun_path) - 1);
 	if (bind(control_socket_fd, (struct sockaddr *) &addr, sizeof(struct sockaddr_un)) < 0){
 	  sockerror("control_socket bind");
+	  exit(1);
+	}
+	if (listen(control_socket_fd, 5) < 0){
+	  sockerror("control_socket listen");
 	  exit(1);
 	}
 	s_log(LOG_DEBUG, "Receiving commands on control socket %s", options.control_socket);

@@ -31,8 +31,45 @@
  */
 
 #include "common.h"
-#include "prototypes.h"
+
+int ping(const char *control){
+  struct sockaddr_un addr;
+  uint16_t msg_size;
+  char buffer[1024];
+  int fd;
+  ssize_t written, read;
+
+  memset(&addr, 0, sizeof(struct sockaddr_un));
+  addr.sun_family = AF_UNIX;
+  strncpy(addr.sun_path, control, sizeof(addr.sun_path) - 1);
+
+  fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (fd < 0) perror("socket");
+  if (connect(fd, (struct sockaddr*) &addr, sizeof(addr)) < 0) perror("connect");
+
+  printf("Sending ping to %s\n", control);
+  msg_size = snprintf(buffer + sizeof(msg_size), sizeof(buffer) - sizeof(msg_size), "PING");
+  *((uint16_t*)buffer) = msg_size;
+  written = send(fd, buffer, msg_size + sizeof(msg_size), 0);
+  if (written < 0) perror("send");
+
+  read = recv(fd, buffer, sizeof(buffer), 0);
+  if (read < 0) perror("read");
+  printf("Received %d bytes [%s]\n", read, buffer + sizeof(uint16_t));
+
+  return 0;
+}
 
 int main(int argc, char* argv[]) {
-  return 0;
+  if (argc < 3){
+	fprintf(stderr, "Usage:\n");
+	fprintf(stderr, "%s <control socket> <command> [args]\n", argv[0]);
+	return 1;
+  }
+  if (strcasecmp(argv[2], "ping") == 0)
+	return ping(argv[1]);
+
+  fprintf(stderr, "Unknown command: %s\n", argv[2]);
+	  
+  return 1;
 }
