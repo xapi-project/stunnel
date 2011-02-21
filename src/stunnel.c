@@ -218,6 +218,14 @@ static void handle_unknown_message(int s){
   }
 }
 
+static void handle_control_stat(int s, const char *addr, int len){
+  
+  handle_unknown_message(s);
+}
+
+#define PING "ping"
+#define STAT "stat "
+
 static void handle_control_connection(){
   ssize_t n;
   char buf[1024];
@@ -238,10 +246,15 @@ static void handle_control_connection(){
   }
   s_log(LOG_DEBUG, "Received a control message: %s (length %d)", buf + sizeof(uint16_t), n);
   
-  if (strcasecmp(buf + sizeof(uint16_t), "ping") == 0){
+  if (strcasecmp(buf + sizeof(uint16_t), PING) == 0){
 	handle_control_ping(s);
 	goto out;
   }
+  if (strncasecmp(buf + sizeof(uint16_t), STAT, strlen(STAT)) == 0){
+	handle_control_stat(s, buf + sizeof(uint16_t) + strlen(STAT), n - sizeof(uint16_t) - strlen(STAT));
+	goto out;
+  }
+
   handle_unknown_message(s);
 
  out:
