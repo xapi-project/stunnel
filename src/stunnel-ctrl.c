@@ -32,12 +32,12 @@
 
 #include "common.h"
 
-int ping(const char *control){
+int do_ping(const char *control){
   struct sockaddr_un addr;
   uint16_t msg_size;
   char buffer[1024];
   int fd;
-  ssize_t written, read;
+  ssize_t nwritten, nread;
 
   memset(&addr, 0, sizeof(struct sockaddr_un));
   addr.sun_family = AF_UNIX;
@@ -50,12 +50,42 @@ int ping(const char *control){
   printf("Sending ping to %s\n", control);
   msg_size = snprintf(buffer + sizeof(msg_size), sizeof(buffer) - sizeof(msg_size), "PING");
   *((uint16_t*)buffer) = msg_size;
-  written = send(fd, buffer, msg_size + sizeof(msg_size), 0);
-  if (written < 0) perror("send");
+  nwritten = send(fd, buffer, msg_size + sizeof(msg_size), 0);
+  if (nwritten < 0) perror("send");
 
-  read = recv(fd, buffer, sizeof(buffer), 0);
-  if (read < 0) perror("read");
-  printf("Received %d bytes [%s]\n", read, buffer + sizeof(uint16_t));
+  bzero(buffer, sizeof(buffer));
+  nread = recv(fd, buffer, sizeof(buffer), 0);
+  if (nread < 0) perror("read");
+  printf("Received %d bytes [%s]\n", nread, buffer + sizeof(uint16_t));
+
+  return 0;
+}
+
+int do_stat(const char *control, const char *address){
+  struct sockaddr_un addr;
+  uint16_t msg_size;
+  char buffer[1024];
+  int fd;
+  ssize_t nwritten, nread;
+
+  memset(&addr, 0, sizeof(struct sockaddr_un));
+  addr.sun_family = AF_UNIX;
+  strncpy(addr.sun_path, control, sizeof(addr.sun_path) - 1);
+
+  fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (fd < 0) perror("socket");
+  if (connect(fd, (struct sockaddr*) &addr, sizeof(addr)) < 0) perror("connect");
+
+  printf("Sending stat to %s\n", control);
+  msg_size = snprintf(buffer + sizeof(msg_size), sizeof(buffer) - sizeof(msg_size), "STAT %s", address);
+  *((uint16_t*)buffer) = msg_size;
+  nwritten = send(fd, buffer, msg_size + sizeof(msg_size), 0);
+  if (nwritten < 0) perror("send");
+
+  bzero(buffer, sizeof(buffer));
+  nread = recv(fd, buffer, sizeof(buffer), 0);
+  if (nread < 0) perror("read");
+  printf("Received %d bytes [%s]\n", nread, buffer + sizeof(uint16_t));
 
   return 0;
 }
@@ -67,7 +97,10 @@ int main(int argc, char* argv[]) {
 	return 1;
   }
   if (strcasecmp(argv[2], "ping") == 0)
-	return ping(argv[1]);
+	return do_ping(argv[1]);
+
+  if (strcasecmp(argv[2], "stat") == 0)
+	return do_stat(argv[1], argv[3]);
 
   fprintf(stderr, "Unknown command: %s\n", argv[2]);
 	  

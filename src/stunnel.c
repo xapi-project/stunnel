@@ -200,7 +200,7 @@ static void daemon_loop(void) {
 static void handle_control_ping(int s){
   ssize_t n;
   char buf[1024];
-
+  bzero(buf, sizeof(buf));
   n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "PONG");
   *((uint16_t*)buf) = n;
   if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
@@ -212,7 +212,7 @@ static void handle_control_ping(int s){
 static void handle_unknown_message(int s){
   ssize_t n;
   char buf[1024];
-
+  bzero(buf, sizeof(buf));
   n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "UNKNOWN MESSAGE");
   *((uint16_t*)buf) = n;
   if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
@@ -222,12 +222,51 @@ static void handle_unknown_message(int s){
 }
 
 static void handle_control_stat(int s, const char *addr, int len){
-  
+  unsigned short port;
+  const char *colon;
+  char *ip;
+  struct sockaddr_in sockaddr;
+  CLI *c;
+
+  /* We expect "addr" to have the form IP:port */
+  colon = strchr(addr, ':');
+  if (!colon){
+	s_log(LOG_ERR, "Failed to parse STAT argument: %s", addr);
+	handle_unknown_message(s);
+	return;
+  }
+  port = atoi(colon + 1); /* worst case colon + 1 is the NULL terminator */
+
+  ip = strdup(addr);
+  ip[colon - addr] = '\0';
+  if (inet_pton(AF_INET, ip, &(sockaddr.sin_addr)) <= 0){
+	s_log(LOG_ERR, "Failed to parse IP from STAT argument: %s (%s)", addr, ip);
+	handle_unknown_message(s);
+	goto out;
+  }
+
+  s_log(LOG_DEBUG, "IP=%s Port=%d", ip, port);
+
+  enter_critical_section(CRIT_CLIENTS);
+  c = all_clients;
+  while (c != NULL){
+	if (c->our_sockname_valid != 0){
+	  if ((memcmp(&sockaddr.sin_addr, &c->our_sockname.sin_addr, sizeof(sockaddr.sin_addr)) == 0) && (sockaddr.sin_port == c->our_sockname.sin_port)) {
+		s_log(LOG_DEBUG, "Found");
+		goto out;
+	  }
+	}
+	c = c->next;
+  }
+  leave_critical_section(CRIT_CLIENTS);
+
   handle_unknown_message(s);
+ out:
+  free(ip);
 }
 
 #define PING "ping"
-#define STAT "stat "
+#define STAT "stat"
 
 static void handle_control_connection(){
   ssize_t n;
@@ -254,7 +293,7 @@ static void handle_control_connection(){
 	goto out;
   }
   if (strncasecmp(buf + sizeof(uint16_t), STAT, strlen(STAT)) == 0){
-	handle_control_stat(s, buf + sizeof(uint16_t) + strlen(STAT), n - sizeof(uint16_t) - strlen(STAT));
+	handle_control_stat(s, buf + sizeof(uint16_t) + strlen(STAT) + 1, n - sizeof(uint16_t) - strlen(STAT) - 1);
 	goto out;
   }
 
