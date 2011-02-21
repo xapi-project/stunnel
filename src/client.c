@@ -138,6 +138,14 @@ void *client(void *arg) {
 static void run_client(CLI *c) {
     int error;
 
+    enter_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
+	s_log(LOG_DEBUG, "%s adding client %lu to list", c->opt->servname, stunnel_thread_id());
+	c->next = all_clients;
+	if (all_clients)
+	  all_clients->prev = c;
+	all_clients = c;
+    leave_critical_section(CRIT_CLIENTS);
+
     c->remote_fd.fd=-1;
     c->fd=-1;
     c->ssl=NULL;
@@ -191,6 +199,16 @@ static void run_client(CLI *c) {
         --num_clients);
     leave_critical_section(CRIT_CLIENTS);
 #endif
+
+    enter_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
+	s_log(LOG_DEBUG, "%s removing client %lu from list", c->opt->servname, stunnel_thread_id());
+	if (c->prev)
+	  c->prev->next = c->next;
+	if (c->next)
+	  c->next->prev = c->prev;
+	if (all_clients == c)
+	  all_clients = NULL;
+    leave_critical_section(CRIT_CLIENTS);
 }
 
 static void do_client(CLI *c) {

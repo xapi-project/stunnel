@@ -261,7 +261,10 @@ typedef struct {
     int is_socket; /* File descriptor is a socket */
 } FD;
 
-typedef struct {
+typedef struct CLI {
+	struct CLI *next; /* a linked-list of client structs */
+	struct CLI *prev;
+
     LOCAL_OPTIONS *opt;
     char accepting_address[IPLEN], connecting_address[IPLEN]; /* text */
     SOCKADDR_LIST peer_addr; /* Peer address */
@@ -281,6 +284,8 @@ typedef struct {
     int sock_bytes, ssl_bytes; /* Bytes written to socket and ssl */
     s_poll_set fds; /* File descriptors */
 } CLI;
+
+extern CLI *all_clients;
 
 extern int max_clients;
 #ifndef USE_WIN32

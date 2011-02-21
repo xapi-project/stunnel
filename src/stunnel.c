@@ -82,12 +82,15 @@ int main(int argc, char* argv[]) { /* execution begins here 8-) */
 }
 #endif
 
+CLI *all_clients;
+
 void main_initialize(char *arg1, char *arg2) {
     ssl_init(); /* initialize SSL library */
     sthreads_init(); /* initialize critical sections & SSL callbacks */
     parse_config(arg1, arg2);
     log_open();
     stunnel_info(0);
+	all_clients = NULL;
 }
 
 void main_execute(void) {
