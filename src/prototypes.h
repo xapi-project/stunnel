@@ -265,6 +265,11 @@ typedef struct CLI {
 	struct CLI *next; /* a linked-list of client structs */
 	struct CLI *prev;
 
+	struct sockaddr_in our_sockname; /* the name of our socket once the port has been set */
+	socklen_t our_sockname_len;
+	int our_sockname_valid; /* 0 means invalid; non-zero means valid */
+
+
     LOCAL_OPTIONS *opt;
     char accepting_address[IPLEN], connecting_address[IPLEN]; /* text */
     SOCKADDR_LIST peer_addr; /* Peer address */

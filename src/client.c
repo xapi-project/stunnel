@@ -949,6 +949,7 @@ static int connect_remote(CLI *c) { /* connect to remote host */
     SOCKADDR_LIST resolved_list, *address_list;
     int error, fd;
     u16 i;
+	char inet[INET6_ADDRSTRLEN]; /* used for debug logging the local sockname IP */
 
     /* setup address_list */
     if(c->opt->option.delayed_lookup) {
@@ -993,6 +994,7 @@ static int connect_remote(CLI *c) { /* connect to remote host */
             c->fd=-1;
             return fd; /* no error -> success (should not be possible) */
         }
+
         error=get_last_socket_error();
         if(error!=EINPROGRESS && error!=EWOULDBLOCK) {
             s_log(LOG_ERR, "remote connect (%s): %s (%d)",
@@ -1002,6 +1004,23 @@ static int connect_remote(CLI *c) { /* connect to remote host */
             continue; /* next IP */
         }
         connect_wait(c);
+
+		/* Now that our local socket is bound, lookup its name for future reference */
+		c->our_sockname_len = sizeof(c->our_sockname);
+		if (getsockname(c->fd, (struct sockaddr*) &(c->our_sockname), &(c->our_sockname_len)) != 0) {
+		  s_log(LOG_ERR, "getsockname failed: %s (fd = %d; namelen = %d)", strerror(errno), c->fd, c->our_sockname_len);
+		  closesocket(c->fd);
+		  c->fd=-1; 
+		  return fd; /* see the "no error -> success case above" */
+		}
+		inet[0] = '\0';
+		inet_ntop(c->our_sockname.sin_family, &(c->our_sockname.sin_addr), inet, sizeof(inet));
+		s_log(LOG_DEBUG, "sockname: port=%d inet=%s", c->our_sockname.sin_port, inet);
+
+		enter_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
+		c->our_sockname_valid = 1;
+		leave_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
+
         fd=c->fd;
         c->fd=-1;
         return fd; /* success! */
