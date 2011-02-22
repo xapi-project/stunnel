@@ -225,8 +225,13 @@ static void handle_control_stat(int s, const char *addr, int len){
   unsigned short port;
   const char *colon;
   char *ip;
-  struct sockaddr_in sockaddr;
+  struct sockaddr_in output_sockaddr; /* address of local service */
+  struct sockaddr_in input_sockaddr;  /* address of original client */
+  socklen_t input_sockaddr_len;
   CLI *c;
+  ssize_t n;
+  char buf[1024];
+  bzero(buf, sizeof(buf));
 
   /* We expect "addr" to have the form IP:port */
   colon = strchr(addr, ':');
@@ -239,7 +244,7 @@ static void handle_control_stat(int s, const char *addr, int len){
 
   ip = strdup(addr);
   ip[colon - addr] = '\0';
-  if (inet_pton(AF_INET, ip, &(sockaddr.sin_addr)) <= 0){
+  if (inet_pton(AF_INET, ip, &(output_sockaddr.sin_addr)) <= 0){
 	s_log(LOG_ERR, "Failed to parse IP from STAT argument: %s (%s)", addr, ip);
 	handle_unknown_message(s);
 	goto out;
@@ -247,20 +252,44 @@ static void handle_control_stat(int s, const char *addr, int len){
 
   s_log(LOG_DEBUG, "IP=%s Port=%d", ip, port);
 
+  /* default if we don't find anything */
+  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "UNKNOWN");
+
   enter_critical_section(CRIT_CLIENTS);
   c = all_clients;
   while (c != NULL){
 	if (c->our_sockname_valid != 0){
-	  if ((memcmp(&sockaddr.sin_addr, &c->our_sockname.sin_addr, sizeof(sockaddr.sin_addr)) == 0) && (sockaddr.sin_port == c->our_sockname.sin_port)) {
+	  s_log(LOG_DEBUG, "Checking port = %d (=%d)", ntohs(c->our_sockname.sin_port), port);
+	  if ((memcmp(&output_sockaddr.sin_addr, &c->our_sockname.sin_addr, sizeof(output_sockaddr.sin_addr)) == 0) && (port == ntohs(c->our_sockname.sin_port))) {
 		s_log(LOG_DEBUG, "Found");
-		goto out;
+		input_sockaddr_len = sizeof(input_sockaddr);
+		if (getsockname(c->local_rfd.fd, (struct sockaddr*) &input_sockaddr, &input_sockaddr_len) != 0){
+		  s_log(LOG_ERR, "getsockname failed: %s", strerror(errno));
+		  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "ERROR");
+
+		} else {
+		  bzero(buf, sizeof(buf));
+		  if (inet_ntop(AF_INET, (const void*) &input_sockaddr.sin_addr, buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t)) == NULL){
+			s_log(LOG_ERR, "inet_ntop failed: %s", strerror(errno));
+			n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "ERROR");
+		  } else {
+			n = strlen(buf + sizeof(uint16_t)) + sizeof(uint16_t);
+			n += snprintf(buf + n, sizeof(buf) - n, ":%d", ntohs(input_sockaddr.sin_port));
+		  }
+		  s_log(LOG_DEBUG, "returning [%s] length %d", buf + sizeof(uint16_t), n);
+		}
+		break;
 	  }
 	}
 	c = c->next;
   }
   leave_critical_section(CRIT_CLIENTS);
 
-  handle_unknown_message(s);
+  *((uint16_t*)buf) = n;
+  if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
+	s_log(LOG_ERR, "Failed to reply to a message on the control socket: %s", strerror(errno)); 
+  }
+ 
  out:
   free(ip);
 }

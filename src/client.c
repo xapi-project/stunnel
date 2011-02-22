@@ -1015,7 +1015,7 @@ static int connect_remote(CLI *c) { /* connect to remote host */
 		}
 		inet[0] = '\0';
 		inet_ntop(c->our_sockname.sin_family, &(c->our_sockname.sin_addr), inet, sizeof(inet));
-		s_log(LOG_DEBUG, "sockname: port=%d inet=%s", c->our_sockname.sin_port, inet);
+		s_log(LOG_DEBUG, "sockname: port=%d inet=%s", ntohs(c->our_sockname.sin_port), inet);
 
 		enter_critical_section(CRIT_CLIENTS); /* for multi-cpu machines */
 		c->our_sockname_valid = 1;
