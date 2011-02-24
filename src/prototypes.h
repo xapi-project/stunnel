@@ -261,6 +261,12 @@ typedef struct {
     int is_socket; /* File descriptor is a socket */
 } FD;
 
+#define CONTROL_NONE 0
+#define CONTROL_PAUSE 1
+#define CONTROL_PAUSE_DONE 2
+#define CONTROL_UNPAUSE 3
+#define CONTROL_UNPAUSE_DONE 4
+
 typedef struct CLI {
 	struct CLI *next; /* a linked-list of client structs */
 	struct CLI *prev;
@@ -269,6 +275,8 @@ typedef struct CLI {
 	socklen_t our_sockname_len;
 	int our_sockname_valid; /* 0 means invalid; non-zero means valid */
 
+  int control_master;
+  int control_slave;
 
     LOCAL_OPTIONS *opt;
     char accepting_address[IPLEN], connecting_address[IPLEN]; /* text */

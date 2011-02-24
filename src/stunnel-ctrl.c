@@ -61,7 +61,7 @@ int do_ping(const char *control){
   return 0;
 }
 
-int do_stat(const char *control, const char *address){
+int do_client_cmd(const char *control, const char *cmd, const char *address){
   struct sockaddr_un addr;
   uint16_t msg_size;
   char buffer[1024];
@@ -76,8 +76,8 @@ int do_stat(const char *control, const char *address){
   if (fd < 0) perror("socket");
   if (connect(fd, (struct sockaddr*) &addr, sizeof(addr)) < 0) perror("connect");
 
-  printf("Sending stat to %s\n", control);
-  msg_size = snprintf(buffer + sizeof(msg_size), sizeof(buffer) - sizeof(msg_size), "STAT %s", address);
+  printf("Sending %s to %s\n", cmd, control);
+  msg_size = snprintf(buffer + sizeof(msg_size), sizeof(buffer) - sizeof(msg_size), "%s %s", cmd, address);
   *((uint16_t*)buffer) = msg_size;
   nwritten = send(fd, buffer, msg_size + sizeof(msg_size), 0);
   if (nwritten < 0) perror("send");
@@ -100,7 +100,11 @@ int main(int argc, char* argv[]) {
 	return do_ping(argv[1]);
 
   if (strcasecmp(argv[2], "stat") == 0)
-	return do_stat(argv[1], argv[3]);
+	return do_client_cmd(argv[1], "STAT", argv[3]);
+  if (strcasecmp(argv[2], "pause") == 0)
+	return do_client_cmd(argv[1], "PAUSE", argv[3]);
+  if (strcasecmp(argv[2], "unpause") == 0)
+	return do_client_cmd(argv[1], "UNPAUSE", argv[3]);
 
   fprintf(stderr, "Unknown command: %s\n", argv[2]);
 	  

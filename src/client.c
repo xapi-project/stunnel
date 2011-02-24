@@ -83,7 +83,8 @@ int max_fds;
 /* Allocate local data structure for the new thread */
 void *alloc_client_session(LOCAL_OPTIONS *opt, int rfd, int wfd) {
     CLI *c;
-
+	int filedes[2];
+	
     c=calloc(1, sizeof(CLI));
     if(!c) {
         s_log(LOG_ERR, "Memory allocation failed");
@@ -92,6 +93,11 @@ void *alloc_client_session(LOCAL_OPTIONS *opt, int rfd, int wfd) {
     c->opt=opt;
     c->local_rfd.fd=rfd;
     c->local_wfd.fd=wfd;
+
+	make_sockets(c, filedes);
+	c->control_master = filedes[1];
+	c->control_slave = filedes[0];
+
     return c;
 }
 
@@ -403,6 +409,7 @@ static void init_ssl(CLI *c) {
 #define sock_can_wr (s_poll_canwrite(&c->fds, c->sock_wfd->fd))
 #define ssl_can_rd  (s_poll_canread(&c->fds, c->ssl_rfd->fd))
 #define ssl_can_wr  (s_poll_canwrite(&c->fds, c->ssl_wfd->fd))
+#define control_can_rd (s_poll_canread(&c->fds, c->control_slave))
 /* NOTE: above defines are related to the logical data stream,
  * no longer to the underlying file descriptors */
 
@@ -416,17 +423,20 @@ static void transfer(CLI *c) {
     int check_SSL_pending;
     enum {CL_OPEN, CL_INIT, CL_RETRY, CL_CLOSED} ssl_closing=CL_OPEN;
     int watchdog=0; /* a counter to detect an infinite loop */
+	char control_command; /* read from the control fd */
 
     c->sock_ptr=c->ssl_ptr=0;
     sock_rd=sock_wr=ssl_rd=ssl_wr=1;
 
     do { /* main loop */
+	start:
         /* set flag to try and read any buffered SSL data
          * if we made room in the buffer by writing to the socket */
         check_SSL_pending=0;
 
         /****************************** setup c->fds structure */
         s_poll_zero(&c->fds); /* Initialize the structure */
+		s_poll_add(&c->fds, c->control_slave, 1, 0);
         if(sock_rd && c->sock_ptr<BUFFSIZE) /* socket input buffer not full*/
             s_poll_add(&c->fds, c->sock_rfd->fd, 1, 0);
         if((ssl_rd && c->ssl_ptr<BUFFSIZE) || /* SSL input buffer not full */
@@ -461,11 +471,59 @@ static void transfer(CLI *c) {
                 return; /* OK */
             }
         }
-        if(!(sock_can_rd || sock_can_wr || ssl_can_rd || ssl_can_wr)) {
+        if(!(sock_can_rd || sock_can_wr || ssl_can_rd || ssl_can_wr || control_can_rd)) {
             s_log(LOG_ERR, "INTERNAL ERROR: "
                 "s_poll_wait returned %d, but no descriptor is ready", err);
             longjmp(c->err, 1);
         }
+
+        /****************************** control message */
+		if (control_can_rd){
+		  if (read(c->control_slave, &control_command, 1) != 1){
+			s_log(LOG_ERR, "INTERNAL ERROR: failed to read from control channel");
+			longjmp(c->err, 1);
+		  }
+		  switch (control_command) {
+		  case CONTROL_UNPAUSE:
+			/* idempotent */
+			s_log(LOG_DEBUG, "CONTROL_UNPAUSE received with no pause (this is ok)");
+			control_command = CONTROL_UNPAUSE_DONE;
+			if (write(c->control_slave, &control_command, 1) != 1){
+			  s_log(LOG_ERR, "INTERNAL ERROR: failed to write to control channel");
+			  longjmp(c->err, 1);
+			}
+			break;
+		  case CONTROL_PAUSE:
+			s_log(LOG_DEBUG, "CONTROL_PAUSE received");
+			control_command = CONTROL_PAUSE_DONE;
+			if (write(c->control_slave, &control_command, 1) != 1){
+			  s_log(LOG_ERR, "INTERNAL ERROR: failed to write to control channel");
+			  longjmp(c->err, 1);
+			}
+			/* synchronously wait for the unpause */
+			if (read(c->control_slave, &control_command, 1) != 1){
+			  s_log(LOG_ERR, "INTERNAL ERROR: failed to read from control channel");
+			  longjmp(c->err, 1);
+			}
+			switch (control_command){
+			case CONTROL_UNPAUSE:
+			  s_log(LOG_DEBUG, "CONTROL_UNPAUSE received");
+			  control_command = CONTROL_UNPAUSE_DONE;
+			  if (write(c->control_slave, &control_command, 1) != 1){
+				s_log(LOG_ERR, "INTERNAL ERROR: failed to write to control channel");
+				longjmp(c->err, 1);
+			  }
+			  goto start;
+			default:
+			  s_log(LOG_ERR, "INTERNAL ERROR: expected CONTROL_UNPAUSE, received %d", control_command);
+			}
+			longjmp(c->err, 1);
+
+		  default:
+			s_log(LOG_ERR, "INTERNAL ERROR: expected CONTROL_PAUSE or CONTROL_UNPAUSE, received %d", control_command);
+			longjmp(c->err, 1);			
+		  }
+		}
 
         /****************************** send SSL close_notify message */
         if(ssl_closing==CL_INIT || (ssl_closing==CL_RETRY &&

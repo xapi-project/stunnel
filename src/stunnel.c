@@ -249,6 +249,62 @@ static int parse_ip_port(const char *x, struct sockaddr_in *sockaddr, unsigned s
   return r;
 }
 
+static void handle_control_pause_or_unpause(int s, const char *addr, int len, char request, char response){
+  char control_message;
+  unsigned short port = 0;
+  struct sockaddr_in output_sockaddr; /* address of local service */
+  CLI *c;
+  ssize_t n;
+  char buf[1024];
+
+  bzero(buf, sizeof(buf));
+
+  if (parse_ip_port(addr, &output_sockaddr, &port) != 0){
+	s_log(LOG_ERR, "Failed to parse argument: %s", addr);
+	handle_unknown_message(s);
+	return;
+  }  
+
+  /* default if we don't find anything */
+  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "UNKNOWN");
+
+  enter_critical_section(CRIT_CLIENTS);
+  c = all_clients;
+  while (c != NULL){
+	if (c->our_sockname_valid != 0){
+	  s_log(LOG_DEBUG, "Checking port = %d (=%d)", ntohs(c->our_sockname.sin_port), port);
+	  if ((memcmp(&output_sockaddr.sin_addr, &c->our_sockname.sin_addr, sizeof(output_sockaddr.sin_addr)) == 0) && (port == ntohs(c->our_sockname.sin_port))) {
+		s_log(LOG_DEBUG, "Found");
+		/* send request, expect response */
+		control_message = request;
+		if (write(c->control_master, &control_message, 1) != 1){
+		  s_log(LOG_ERR, "INTERNAL_ERROR: failed to write %d on control connection", request);
+		} else {
+		  s_log(LOG_DEBUG, "Sent %d", request);
+		  control_message = CONTROL_NONE;
+		  read(c->control_master, &control_message, 1);
+		  if (control_message != response){
+			s_log(LOG_ERR, "INTERNAL_ERROR: failed to read %d on control connection", response);
+			
+		  } else {
+			s_log(LOG_DEBUG, "Received %d", response);
+			n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "OK");
+		  }
+		}
+		break;
+	  }
+	}
+	c = c->next;
+  }
+  leave_critical_section(CRIT_CLIENTS);
+
+  *((uint16_t*)buf) = n;
+  if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
+	s_log(LOG_ERR, "Failed to reply to a message on the control socket: %s", strerror(errno)); 
+  }  
+
+}
+
 static void handle_control_stat(int s, const char *addr, int len){
   unsigned short port = 0;
   struct sockaddr_in output_sockaddr; /* address of local service */
@@ -307,6 +363,8 @@ static void handle_control_stat(int s, const char *addr, int len){
 
 #define PING "ping"
 #define STAT "stat"
+#define PAUSE "pause"
+#define UNPAUSE "unpause"
 
 static void handle_control_connection(){
   ssize_t n;
@@ -334,6 +392,14 @@ static void handle_control_connection(){
   }
   if (strncasecmp(buf + sizeof(uint16_t), STAT, strlen(STAT)) == 0){
 	handle_control_stat(s, buf + sizeof(uint16_t) + strlen(STAT) + 1, n - sizeof(uint16_t) - strlen(STAT) - 1);
+	goto out;
+  }
+  if (strncasecmp(buf + sizeof(uint16_t), PAUSE, strlen(PAUSE)) == 0){
+	handle_control_pause_or_unpause(s, buf + sizeof(uint16_t) + strlen(PAUSE) + 1, n - sizeof(uint16_t) - strlen(PAUSE) - 1, CONTROL_PAUSE, CONTROL_PAUSE_DONE);
+	goto out;
+  }
+  if (strncasecmp(buf + sizeof(uint16_t), UNPAUSE, strlen(UNPAUSE)) == 0){
+	handle_control_pause_or_unpause(s, buf + sizeof(uint16_t) + strlen(UNPAUSE) + 1, n - sizeof(uint16_t) - strlen(UNPAUSE) - 1, CONTROL_UNPAUSE, CONTROL_UNPAUSE_DONE);
 	goto out;
   }
 
