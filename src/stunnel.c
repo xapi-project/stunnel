@@ -221,10 +221,36 @@ static void handle_unknown_message(int s){
   }
 }
 
-static void handle_control_stat(int s, const char *addr, int len){
-  unsigned short port;
-  const char *colon;
+static int parse_ip_port(const char *x, struct sockaddr_in *sockaddr, unsigned short *port){
   char *ip;
+  const char *colon;
+  int r;
+
+  /* We expect "addr" to have the form IP:port */
+  colon = strchr(x, ':');
+  if (!colon){
+	s_log(LOG_ERR, "Failed to parse IP:port [%s]", x);
+	return 1;
+  }
+  *port = atoi(colon + 1); /* worst case colon + 1 is the NULL terminator */
+
+  ip = strdup(x);
+  r = 0;
+  ip[colon - x] = '\0';
+  if (inet_pton(AF_INET, ip, &(sockaddr->sin_addr)) <= 0){
+	s_log(LOG_ERR, "Failed to parse IP from argument: %s (%s)", x, ip);
+	r = 2;
+	goto out;
+  }
+
+  s_log(LOG_DEBUG, "IP=%s Port=%d", ip, *port);
+ out:
+  free(ip);
+  return r;
+}
+
+static void handle_control_stat(int s, const char *addr, int len){
+  unsigned short port = 0;
   struct sockaddr_in output_sockaddr; /* address of local service */
   struct sockaddr_in input_sockaddr;  /* address of original client */
   socklen_t input_sockaddr_len;
@@ -233,24 +259,11 @@ static void handle_control_stat(int s, const char *addr, int len){
   char buf[1024];
   bzero(buf, sizeof(buf));
 
-  /* We expect "addr" to have the form IP:port */
-  colon = strchr(addr, ':');
-  if (!colon){
+  if (parse_ip_port(addr, &output_sockaddr, &port) != 0){
 	s_log(LOG_ERR, "Failed to parse STAT argument: %s", addr);
 	handle_unknown_message(s);
 	return;
   }
-  port = atoi(colon + 1); /* worst case colon + 1 is the NULL terminator */
-
-  ip = strdup(addr);
-  ip[colon - addr] = '\0';
-  if (inet_pton(AF_INET, ip, &(output_sockaddr.sin_addr)) <= 0){
-	s_log(LOG_ERR, "Failed to parse IP from STAT argument: %s (%s)", addr, ip);
-	handle_unknown_message(s);
-	goto out;
-  }
-
-  s_log(LOG_DEBUG, "IP=%s Port=%d", ip, port);
 
   /* default if we don't find anything */
   n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "UNKNOWN");
@@ -290,8 +303,6 @@ static void handle_control_stat(int s, const char *addr, int len){
 	s_log(LOG_ERR, "Failed to reply to a message on the control socket: %s", strerror(errno)); 
   }
  
- out:
-  free(ip);
 }
 
 #define PING "ping"
