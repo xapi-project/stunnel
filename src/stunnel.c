@@ -249,6 +249,17 @@ static int parse_ip_port(const char *x, struct sockaddr_in *sockaddr, unsigned s
   return r;
 }
 
+static void handle_splice(int s, const char *addr, int len, int receive_fd){
+  ssize_t n;
+  char buf[1024];
+
+  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "OK");
+  *((uint16_t*)buf) = n;
+  if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
+	s_log(LOG_ERR, "Failed to reply to a message on the control socket: %s", strerror(errno)); 
+  }
+}
+
 static void handle_control_pause_or_unpause(int s, const char *addr, int len, char request, char response){
   char control_message;
   unsigned short port = 0;
@@ -365,6 +376,7 @@ static void handle_control_stat(int s, const char *addr, int len){
 #define STAT "stat"
 #define PAUSE "pause"
 #define UNPAUSE "unpause"
+#define SPLICE "splice"
 
 static void handle_control_connection(){
   ssize_t n;
@@ -372,6 +384,12 @@ static void handle_control_connection(){
   struct sockaddr_un addr;
   socklen_t addrlen;
   int s;
+  int received_fd;
+
+  struct msghdr msg;
+  struct iovec vec;
+  struct cmsghdr *cmsg;
+  char cbuf[CMSG_SPACE(sizeof(s))];
 
   s = accept(control_socket_fd, (struct sockaddr*)&addr, &addrlen);
   if (s < 0) {
@@ -380,7 +398,19 @@ static void handle_control_connection(){
   }
 
   bzero(buf, sizeof(buf));
-  if ((n = recv(s, buf, sizeof(buf), 0)) < 0){
+  msg.msg_name=&addr; /* NULL might be ok */
+  msg.msg_namelen=sizeof(addr);
+  vec.iov_base=buf;
+  vec.iov_len=sizeof(buf);
+  msg.msg_iov=&vec;
+
+  msg.msg_iovlen=1;
+
+  msg.msg_control = cbuf;
+  msg.msg_controllen = sizeof(cbuf);
+
+
+  if ((n = recvmsg(s, &msg, 0)) < 0){
 	s_log(LOG_ERR, "Failed to read a message on the control socket (n=%d) fd=%d errno=%s", n, control_socket_fd, strerror(errno));
 	goto out;
   }
@@ -402,6 +432,18 @@ static void handle_control_connection(){
 	handle_control_pause_or_unpause(s, buf + sizeof(uint16_t) + strlen(UNPAUSE) + 1, n - sizeof(uint16_t) - strlen(UNPAUSE) - 1, CONTROL_UNPAUSE, CONTROL_UNPAUSE_DONE);
 	goto out;
   }
+  if (strncasecmp(buf + sizeof(uint16_t), SPLICE, strlen(SPLICE)) == 0){
+	if (msg.msg_controllen > 0){
+	  cmsg = CMSG_FIRSTHDR(&msg);
+	  if(cmsg->cmsg_level == SOL_SOCKET && (cmsg->cmsg_type == SCM_RIGHTS)) {
+		received_fd=*(int*)CMSG_DATA(cmsg);
+		handle_splice(s, buf + sizeof(uint16_t) + strlen(SPLICE) + 1, n - sizeof(uint16_t) - strlen(SPLICE) - 1, received_fd);
+		goto out;
+ 	  }
+	}
+	s_log(LOG_ERR, "SPLICE requires a file descriptor");
+  }
+
 
   handle_unknown_message(s);
 
