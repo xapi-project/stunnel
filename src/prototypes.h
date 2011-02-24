@@ -278,6 +278,8 @@ typedef struct CLI {
   int control_master;
   int control_slave;
 
+  int queued_fd;
+
     LOCAL_OPTIONS *opt;
     char accepting_address[IPLEN], connecting_address[IPLEN]; /* text */
     SOCKADDR_LIST peer_addr; /* Peer address */

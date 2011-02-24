@@ -613,6 +613,14 @@ static void transfer(CLI *c) {
                 break;
             case 0: /* close */
                 s_log(LOG_DEBUG, "Socket closed on read");
+				if (c->queued_fd){
+				  s_log(LOG_DEBUG, "Replacing old socket with queued one");
+				  close(c->sock_rfd->fd);
+				  c->sock_rfd->fd = c->queued_fd;
+				  c->sock_wfd->fd = c->queued_fd;
+				  c->queued_fd = 0;
+				  goto start;
+				}
                 sock_rd=0;
                 break;
             default:

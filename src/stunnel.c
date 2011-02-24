@@ -250,10 +250,30 @@ static int parse_ip_port(const char *x, struct sockaddr_in *sockaddr, unsigned s
 }
 
 static void handle_splice(int s, const char *addr, int len, int receive_fd){
+  unsigned short port = 0;
+  struct sockaddr_in output_sockaddr; /* address of local service */
+  CLI *c;
   ssize_t n;
   char buf[1024];
 
-  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "OK");
+  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "UNKNOWN");
+
+  enter_critical_section(CRIT_CLIENTS);
+  c = all_clients;
+  while (c != NULL){
+	if (c->our_sockname_valid != 0){
+	  s_log(LOG_DEBUG, "Checking port = %d (=%d)", ntohs(c->our_sockname.sin_port), port);
+	  if ((memcmp(&output_sockaddr.sin_addr, &c->our_sockname.sin_addr, sizeof(output_sockaddr.sin_addr)) == 0) && (port == ntohs(c->our_sockname.sin_port))) {
+		s_log(LOG_DEBUG, "Found");
+		c->queued_fd = receive_fd;
+		n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "OK");
+		break;
+	  }
+	}
+	c = c->next;
+  }
+  leave_critical_section(CRIT_CLIENTS);
+
   *((uint16_t*)buf) = n;
   if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
 	s_log(LOG_ERR, "Failed to reply to a message on the control socket: %s", strerror(errno)); 
