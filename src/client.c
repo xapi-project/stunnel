@@ -404,11 +404,17 @@ static void init_ssl(CLI *c) {
 #define ssl_rd  (c->ssl_rfd->rd)
 #define ssl_wr  (c->ssl_wfd->wr)
 
+/* which FD to use */
+#define sock_rd_fd (c->sock_rfd->fd)
+#define sock_wr_fd (c->sock_wfd->fd)
+#define ssl_rd_fd  (c->ssl_rfd->fd)
+#define ssl_wr_fd  (c->ssl_wfd->fd)
+
 /* is socket/SSL ready for read/write? */
-#define sock_can_rd (s_poll_canread(&c->fds, c->sock_rfd->fd))
-#define sock_can_wr (s_poll_canwrite(&c->fds, c->sock_wfd->fd))
-#define ssl_can_rd  (s_poll_canread(&c->fds, c->ssl_rfd->fd))
-#define ssl_can_wr  (s_poll_canwrite(&c->fds, c->ssl_wfd->fd))
+#define sock_can_rd (s_poll_canread(&c->fds, sock_rd_fd))
+#define sock_can_wr (s_poll_canwrite(&c->fds, sock_wr_fd))
+#define ssl_can_rd  (s_poll_canread(&c->fds, ssl_rd_fd))
+#define ssl_can_wr  (s_poll_canwrite(&c->fds, ssl_wr_fd))
 #define control_can_rd (s_poll_canread(&c->fds, c->control_slave))
 /* NOTE: above defines are related to the logical data stream,
  * no longer to the underlying file descriptors */
@@ -438,20 +444,20 @@ static void transfer(CLI *c) {
         s_poll_zero(&c->fds); /* Initialize the structure */
 		s_poll_add(&c->fds, c->control_slave, 1, 0);
         if(sock_rd && c->sock_ptr<BUFFSIZE) /* socket input buffer not full*/
-            s_poll_add(&c->fds, c->sock_rfd->fd, 1, 0);
+            s_poll_add(&c->fds, sock_rd_fd, 1, 0);
         if((ssl_rd && c->ssl_ptr<BUFFSIZE) || /* SSL input buffer not full */
                 ((c->sock_ptr || ssl_closing==CL_RETRY) && want_rd))
                 /* want to SSL_write or SSL_shutdown but read from the
                  * underlying socket needed for the SSL protocol */
-            s_poll_add(&c->fds, c->ssl_rfd->fd, 1, 0);
+            s_poll_add(&c->fds, ssl_rd_fd, 1, 0);
         if(c->ssl_ptr) /* SSL input buffer not empty */
-            s_poll_add(&c->fds, c->sock_wfd->fd, 0, 1);
+            s_poll_add(&c->fds, sock_wr_fd, 0, 1);
         if(c->sock_ptr || /* socket input buffer not empty */
                 ssl_closing==CL_INIT /* need to send close_notify */ ||
                 ((c->ssl_ptr<BUFFSIZE || ssl_closing==CL_RETRY) && want_wr))
                 /* want to SSL_read or SSL_shutdown but write to the
                  * underlying socket needed for the SSL protocol */
-            s_poll_add(&c->fds, c->ssl_wfd->fd, 0, 1);
+            s_poll_add(&c->fds, ssl_wr_fd, 0, 1);
 
         /****************************** wait for an event */
         err=s_poll_wait(&c->fds, (sock_rd && ssl_rd) /* both peers open */ ||
@@ -545,7 +551,7 @@ static void transfer(CLI *c) {
 
         /****************************** write to socket */
         if(sock_wr && sock_can_wr) {
-            num=writesocket(c->sock_wfd->fd, c->ssl_buff, c->ssl_ptr);
+            num=writesocket(sock_wr_fd, c->ssl_buff, c->ssl_ptr);
             switch(num) {
             case -1: /* error */
                 parse_socket_error(c, "writesocket");
@@ -605,7 +611,7 @@ static void transfer(CLI *c) {
 
         /****************************** read from socket */
         if(sock_rd && sock_can_rd) {
-            num=readsocket(c->sock_rfd->fd,
+            num=readsocket(sock_rd_fd,
                 c->sock_buff+c->sock_ptr, BUFFSIZE-c->sock_ptr);
             switch(num) {
             case -1:
@@ -615,9 +621,9 @@ static void transfer(CLI *c) {
                 s_log(LOG_DEBUG, "Socket closed on read");
 				if (c->queued_fd){
 				  s_log(LOG_DEBUG, "Replacing old socket with queued one");
-				  close(c->sock_rfd->fd);
-				  c->sock_rfd->fd = c->queued_fd;
-				  c->sock_wfd->fd = c->queued_fd;
+				  close(sock_rd_fd);
+				  sock_rd_fd = c->queued_fd;
+				  sock_wr_fd = c->queued_fd;
 				  c->queued_fd = 0;
 				  goto start;
 				}
@@ -683,7 +689,7 @@ static void transfer(CLI *c) {
         if(sock_wr && !ssl_rd && !c->ssl_ptr) {
             s_log(LOG_DEBUG, "Socket write shutdown");
             sock_wr=0; /* no further write allowed */
-            shutdown(c->sock_wfd->fd, SHUT_WR); /* send TCP FIN */
+            shutdown(sock_wr_fd, SHUT_WR); /* send TCP FIN */
         }
         if(ssl_wr && (!sock_rd || SSL_get_shutdown(c->ssl)) && !c->sock_ptr) {
             s_log(LOG_DEBUG, "SSL write shutdown");
@@ -691,8 +697,8 @@ static void transfer(CLI *c) {
             if(strcmp(SSL_get_version(c->ssl), "SSLv2")) { /* SSLv3, TLSv1 */
                 ssl_closing=CL_INIT; /* initiate close_notify */
             } else { /* no alerts in SSLv2 including close_notify alert */
-                shutdown(c->sock_rfd->fd, SHUT_RD); /* notify the kernel */
-                shutdown(c->sock_wfd->fd, SHUT_WR); /* send TCP FIN */
+                shutdown(sock_rd_fd, SHUT_RD); /* notify the kernel */
+                shutdown(sock_wr_fd, SHUT_WR); /* send TCP FIN */
                 SSL_set_shutdown(c->ssl, /* notify the OpenSSL library */
                     SSL_SENT_SHUTDOWN|SSL_RECEIVED_SHUTDOWN);
                 ssl_rd=0; /* no further read allowed */
