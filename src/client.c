@@ -492,6 +492,15 @@ static void transfer(CLI *c) {
 			longjmp(c->err, 1);
 		  }
 		  switch (control_command) {
+		  case CONTROL_REFRESH:
+			s_log(LOG_DEBUG, "CONTROL_REFRESH received: restarting transfer loop");
+			control_command = CONTROL_REFRESH_DONE;
+			if (write(c->control_slave, &control_command, 1) != 1){
+			  s_log(LOG_ERR, "INTERNAL ERROR: failed to write to control channel");
+			  longjmp(c->err, 1);
+			}
+			goto start;
+			break;
 		  case CONTROL_UNPAUSE:
 			/* idempotent */
 			s_log(LOG_DEBUG, "CONTROL_UNPAUSE received with no pause (this is ok)");

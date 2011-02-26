@@ -105,6 +105,8 @@ int main(int argc, char* argv[]) {
 	return do_client_cmd(argv[1], "PAUSE", argv[3]);
   if (strcasecmp(argv[2], "unpause") == 0)
 	return do_client_cmd(argv[1], "UNPAUSE", argv[3]);
+  if (strcasecmp(argv[2], "refresh") == 0)
+	return do_client_cmd(argv[1], "REFRESH", argv[3]);
 
   fprintf(stderr, "Unknown command: %s\n", argv[2]);
 	  

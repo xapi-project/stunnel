@@ -396,6 +396,7 @@ static void handle_control_stat(int s, const char *addr, int len){
 #define STAT "stat"
 #define PAUSE "pause"
 #define UNPAUSE "unpause"
+#define REFRESH "refresh"
 #define SPLICE "splice"
 
 static void handle_control_connection(){
@@ -450,6 +451,10 @@ static void handle_control_connection(){
   }
   if (strncasecmp(buf + sizeof(uint16_t), UNPAUSE, strlen(UNPAUSE)) == 0){
 	handle_control_pause_or_unpause(s, buf + sizeof(uint16_t) + strlen(UNPAUSE) + 1, n - sizeof(uint16_t) - strlen(UNPAUSE) - 1, CONTROL_UNPAUSE, CONTROL_UNPAUSE_DONE);
+	goto out;
+  }
+  if (strncasecmp(buf + sizeof(uint16_t), REFRESH, strlen(REFRESH)) == 0){
+	handle_control_pause_or_unpause(s, buf + sizeof(uint16_t) + strlen(REFRESH) + 1, n - sizeof(uint16_t) - strlen(REFRESH) - 1, CONTROL_REFRESH, CONTROL_REFRESH_DONE);
 	goto out;
   }
   if (strncasecmp(buf + sizeof(uint16_t), SPLICE, strlen(SPLICE)) == 0){
