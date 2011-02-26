@@ -405,8 +405,10 @@ static void init_ssl(CLI *c) {
 #define ssl_wr  (c->ssl_wfd->wr)
 
 /* which FD to use */
+/* sock reads always come from the "main" fd */
 #define sock_rd_fd (c->sock_rfd->fd)
-#define sock_wr_fd (c->sock_wfd->fd)
+/* if a SPLICE call has queued a second fd, redirect writes immediately */
+#define sock_wr_fd ((c->queued_fd == 0)?c->sock_wfd->fd:c->queued_fd)
 #define ssl_rd_fd  (c->ssl_rfd->fd)
 #define ssl_wr_fd  (c->ssl_wfd->fd)
 
@@ -622,8 +624,8 @@ static void transfer(CLI *c) {
 				if (c->queued_fd){
 				  s_log(LOG_DEBUG, "Replacing old socket with queued one");
 				  close(sock_rd_fd);
-				  sock_rd_fd = c->queued_fd;
-				  sock_wr_fd = c->queued_fd;
+				  c->sock_rfd->fd = c->queued_fd;
+				  c->sock_wfd->fd = c->queued_fd;
 				  c->queued_fd = 0;
 				  goto start;
 				}
