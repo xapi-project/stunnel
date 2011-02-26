@@ -377,6 +377,13 @@ static void handle_splice(int s, const char *addr, int len, int receive_fd){
   char buf[1024];
   char control_message;
 
+  if (parse_ip_port(addr, &output_sockaddr, &port) != 0){
+	s_log(LOG_ERR, "Failed to parse SPLICE argument: %s", addr);
+	handle_unknown_message(s);
+	return;
+  }
+
+  /* default if we don't find anything */
   n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "UNKNOWN");
 
   enter_critical_section(CRIT_CLIENTS);
