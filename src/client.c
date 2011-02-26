@@ -492,9 +492,15 @@ static void transfer(CLI *c) {
 			longjmp(c->err, 1);
 		  }
 		  switch (control_command) {
-		  case CONTROL_REFRESH:
-			s_log(LOG_DEBUG, "CONTROL_REFRESH received: restarting transfer loop");
-			control_command = CONTROL_REFRESH_DONE;
+		  case CONTROL_SPLICE:
+			s_log(LOG_DEBUG, "CONTROL_SPLICE received: reading file descriptor");
+			if (read(c->control_slave, &c->queued_fd, sizeof(c->queued_fd)) != sizeof(c->queued_fd)){
+			  s_log(LOG_ERR, "INTERNAL ERROR: failed to read from control channel");
+			  longjmp(c->err, 1);
+			}
+			s_log(LOG_DEBUG, "CONTROL_SPLICE received fd %d: restarting loop");
+
+			control_command = CONTROL_SPLICE_DONE;
 			if (write(c->control_slave, &control_command, 1) != 1){
 			  s_log(LOG_ERR, "INTERNAL ERROR: failed to write to control channel");
 			  longjmp(c->err, 1);

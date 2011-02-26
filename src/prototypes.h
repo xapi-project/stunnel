@@ -266,8 +266,8 @@ typedef struct {
 #define CONTROL_PAUSE_DONE 2
 #define CONTROL_UNPAUSE 3
 #define CONTROL_UNPAUSE_DONE 4
-#define CONTROL_REFRESH 5
-#define CONTROL_REFRESH_DONE 6
+#define CONTROL_SPLICE 5
+#define CONTROL_SPLICE_DONE 6
 
 typedef struct CLI {
 	struct CLI *next; /* a linked-list of client structs */

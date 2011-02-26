@@ -249,37 +249,6 @@ static int parse_ip_port(const char *x, struct sockaddr_in *sockaddr, unsigned s
   return r;
 }
 
-static void handle_splice(int s, const char *addr, int len, int receive_fd){
-  unsigned short port = 0;
-  struct sockaddr_in output_sockaddr; /* address of local service */
-  CLI *c;
-  ssize_t n;
-  char buf[1024];
-
-  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "UNKNOWN");
-
-  enter_critical_section(CRIT_CLIENTS);
-  c = all_clients;
-  while (c != NULL){
-	if (c->our_sockname_valid != 0){
-	  s_log(LOG_DEBUG, "Checking port = %d (=%d)", ntohs(c->our_sockname.sin_port), port);
-	  if ((memcmp(&output_sockaddr.sin_addr, &c->our_sockname.sin_addr, sizeof(output_sockaddr.sin_addr)) == 0) && (port == ntohs(c->our_sockname.sin_port))) {
-		s_log(LOG_DEBUG, "Found");
-		c->queued_fd = receive_fd;
-		n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "OK");
-		break;
-	  }
-	}
-	c = c->next;
-  }
-  leave_critical_section(CRIT_CLIENTS);
-
-  *((uint16_t*)buf) = n;
-  if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
-	s_log(LOG_ERR, "Failed to reply to a message on the control socket: %s", strerror(errno)); 
-  }
-}
-
 static void handle_control_pause_or_unpause(int s, const char *addr, int len, char request, char response){
   char control_message;
   unsigned short port = 0;
@@ -399,6 +368,58 @@ static void handle_control_stat(int s, const char *addr, int len){
 #define REFRESH "refresh"
 #define SPLICE "splice"
 
+
+static void handle_splice(int s, const char *addr, int len, int receive_fd){
+  unsigned short port = 0;
+  struct sockaddr_in output_sockaddr; /* address of local service */
+  CLI *c;
+  ssize_t n;
+  char buf[1024];
+  char control_message;
+
+  n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "UNKNOWN");
+
+  enter_critical_section(CRIT_CLIENTS);
+  c = all_clients;
+  while (c != NULL){
+	if (c->our_sockname_valid != 0){
+	  s_log(LOG_DEBUG, "Checking port = %d (=%d)", ntohs(c->our_sockname.sin_port), port);
+	  if ((memcmp(&output_sockaddr.sin_addr, &c->our_sockname.sin_addr, sizeof(output_sockaddr.sin_addr)) == 0) && (port == ntohs(c->our_sockname.sin_port))) {
+		s_log(LOG_DEBUG, "Found");
+
+		control_message = CONTROL_SPLICE;
+		
+		if (write(c->control_master, &control_message, 1) != 1){
+		  s_log(LOG_ERR, "INTERNAL_ERROR: failed to write %d on control connection", CONTROL_SPLICE);
+		  break;
+		}
+		if (write(c->control_master, &receive_fd, sizeof(receive_fd)) != sizeof(receive_fd)) {
+		  s_log(LOG_ERR, "INTERNAL_ERROR: failed to write fd %d on control connection", receive_fd);
+		  break;
+		}
+		control_message = CONTROL_NONE;
+		read(c->control_master, &control_message, 1);
+		if (control_message != CONTROL_SPLICE_DONE){
+		  s_log(LOG_ERR, "INTERNAL_ERROR: failed to read %d on control connection", CONTROL_SPLICE_DONE);
+		  break;
+		}
+			
+		s_log(LOG_DEBUG, "Received %d", CONTROL_SPLICE_DONE);
+		n = snprintf(buf + sizeof(uint16_t), sizeof(buf) - sizeof(uint16_t), "OK");
+		break;
+	  }
+	}
+	c = c->next;
+  }
+  leave_critical_section(CRIT_CLIENTS);
+
+  *((uint16_t*)buf) = n;
+  if ((n = send(s, buf, n + sizeof(uint16_t), 0)) < 0){
+	s_log(LOG_ERR, "Failed to reply to a message on the control socket: %s", strerror(errno)); 
+  }
+}
+
+
 static void handle_control_connection(){
   ssize_t n;
   char buf[1024];
@@ -451,10 +472,6 @@ static void handle_control_connection(){
   }
   if (strncasecmp(buf + sizeof(uint16_t), UNPAUSE, strlen(UNPAUSE)) == 0){
 	handle_control_pause_or_unpause(s, buf + sizeof(uint16_t) + strlen(UNPAUSE) + 1, n - sizeof(uint16_t) - strlen(UNPAUSE) - 1, CONTROL_UNPAUSE, CONTROL_UNPAUSE_DONE);
-	goto out;
-  }
-  if (strncasecmp(buf + sizeof(uint16_t), REFRESH, strlen(REFRESH)) == 0){
-	handle_control_pause_or_unpause(s, buf + sizeof(uint16_t) + strlen(REFRESH) + 1, n - sizeof(uint16_t) - strlen(REFRESH) - 1, CONTROL_REFRESH, CONTROL_REFRESH_DONE);
 	goto out;
   }
   if (strncasecmp(buf + sizeof(uint16_t), SPLICE, strlen(SPLICE)) == 0){
