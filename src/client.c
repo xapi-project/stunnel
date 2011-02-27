@@ -507,43 +507,9 @@ static void transfer(CLI *c) {
 			}
 			goto start;
 			break;
-		  case CONTROL_UNPAUSE:
-			/* idempotent */
-			s_log(LOG_DEBUG, "CONTROL_UNPAUSE received with no pause (this is ok)");
-			control_command = CONTROL_UNPAUSE_DONE;
-			if (write(c->control_slave, &control_command, 1) != 1){
-			  s_log(LOG_ERR, "INTERNAL ERROR: failed to write to control channel");
-			  longjmp(c->err, 1);
-			}
-			break;
-		  case CONTROL_PAUSE:
-			s_log(LOG_DEBUG, "CONTROL_PAUSE received");
-			control_command = CONTROL_PAUSE_DONE;
-			if (write(c->control_slave, &control_command, 1) != 1){
-			  s_log(LOG_ERR, "INTERNAL ERROR: failed to write to control channel");
-			  longjmp(c->err, 1);
-			}
-			/* synchronously wait for the unpause */
-			if (read(c->control_slave, &control_command, 1) != 1){
-			  s_log(LOG_ERR, "INTERNAL ERROR: failed to read from control channel");
-			  longjmp(c->err, 1);
-			}
-			switch (control_command){
-			case CONTROL_UNPAUSE:
-			  s_log(LOG_DEBUG, "CONTROL_UNPAUSE received");
-			  control_command = CONTROL_UNPAUSE_DONE;
-			  if (write(c->control_slave, &control_command, 1) != 1){
-				s_log(LOG_ERR, "INTERNAL ERROR: failed to write to control channel");
-				longjmp(c->err, 1);
-			  }
-			  goto start;
-			default:
-			  s_log(LOG_ERR, "INTERNAL ERROR: expected CONTROL_UNPAUSE, received %d", control_command);
-			}
-			longjmp(c->err, 1);
 
 		  default:
-			s_log(LOG_ERR, "INTERNAL ERROR: expected CONTROL_PAUSE or CONTROL_UNPAUSE, received %d", control_command);
+			s_log(LOG_ERR, "INTERNAL ERROR: expected CONTROL_SPLICE (%d), received %d", CONTROL_SPLICE, control_command);
 			longjmp(c->err, 1);			
 		  }
 		}

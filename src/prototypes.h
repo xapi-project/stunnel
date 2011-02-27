@@ -262,10 +262,6 @@ typedef struct {
 } FD;
 
 #define CONTROL_NONE 0
-#define CONTROL_PAUSE 1
-#define CONTROL_PAUSE_DONE 2
-#define CONTROL_UNPAUSE 3
-#define CONTROL_UNPAUSE_DONE 4
 #define CONTROL_SPLICE 5
 #define CONTROL_SPLICE_DONE 6
 
