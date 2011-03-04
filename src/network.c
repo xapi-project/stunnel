@@ -554,18 +554,21 @@ void read_blocking(CLI *c, int fd, u8 *ptr, int len) {
 }
 
 void fdputline(CLI *c, int fd, char *line) {
-    char logline[STRLEN];
+    char tmpline[STRLEN];
     const char crlf[]="\r\n";
+    int len;
 
     if(strlen(line)+2>=STRLEN) { /* 2 for crlf */
         s_log(LOG_ERR, "Line too long in fdputline");
         longjmp(c->err, 1);
     }
-    safecopy(logline, line); /* the line without crlf */
-    safeconcat(line, crlf);
-    write_blocking(c, fd, line, strlen(line));
-    safestring(logline);
-    s_log(LOG_DEBUG, " -> %s", logline);
+    safecopy(tmpline, line);
+    safeconcat(tmpline, crlf);
+    len=strlen(tmpline);
+    write_blocking(c, fd, tmpline, len);
+    tmpline[len-2]='\0'; /* remove CRLF */
+    safestring(tmpline);
+    s_log(LOG_DEBUG, " -> %s", tmpline);
 }
 
 void fdgetline(CLI *c, int fd, char *line) {

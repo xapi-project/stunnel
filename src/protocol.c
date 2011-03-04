@@ -176,7 +176,7 @@ static void smtp_server(CLI *c) {
         s_log(LOG_ERR, "Unknown server welcome");
         longjmp(c->err, 1);
     }
-    fdprintf(c, c->local_wfd.fd, "220%s + stunnel", line);
+    fdprintf(c, c->local_wfd.fd, "%s + stunnel", line);
     fdgetline(c, c->local_rfd.fd, line);
     if(!isprefix(line, "EHLO ")) {
         s_log(LOG_ERR, "Unknown client EHLO");
