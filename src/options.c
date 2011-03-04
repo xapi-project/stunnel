@@ -123,7 +123,11 @@ static char *global_options(CMD cmd, char *opt, char *arg) {
     case CMD_INIT:
         options.debug_level=5;
 #if !defined (USE_WIN32) && !defined (__vms)
+#if defined(LOG_AUTHPRIV)
+        options.facility=LOG_AUTHPRIV;
+#else
         options.facility=LOG_DAEMON;
+#endif
 #endif
         break;
     case CMD_EXEC:
