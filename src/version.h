@@ -35,39 +35,36 @@
  *   forward this exception.
  */
 
-#include "common.h"
-#include "prototypes.h"
+#ifndef VERSION_MAJOR
 
-int main(int argc, char *argv[]) {
-    static struct WSAData wsa_state;
+/* START CUSTOMIZE */
+#define VERSION_MAJOR 4
+#define VERSION_MINOR 35
+/* END CUSTOMIZE */
 
-    if(WSAStartup(MAKEWORD(1, 1), &wsa_state))
-        return 1;
-    main_initialize(argc>1 ? argv[1] : NULL, argc>2 ? argv[2] : NULL);
-    main_execute();
-    return 0;
-}
+/* all the following macros are ABSOLUTELY NECESSARY to have proper string
+   construction with VARIOUS C preprocessors (EVC, VC, BCC, GCC) */
+#define STRINGIZE0(x) #x
+#define STRINGIZE(x) STRINGIZE0(x)
+#define STRZCONCAT30(a,b,c) a##b##c
+#define STRZCONCAT3(a,b,c) STRZCONCAT30(a,b,c)
+ 
+/* for resource.rc, stunnel.c, gui.c */
+#define STUNNEL_VERSION0 STRZCONCAT3(VERSION_MAJOR, . , VERSION_MINOR)
+#define STUNNEL_VERSION STRINGIZE(STUNNEL_VERSION0)
 
-void win_log(LPSTR line) { /* also used in log.c */
-    LPTSTR tstr;
+/* for version.rc */
+#define STUNNEL_VERSION_FIELDS VERSION_MAJOR,VERSION_MINOR,0,0
+#define STUNNEL_VERSION_STR STUNNEL_VERSION "\0"
+#define STUNNEL_PRODUCTNAME_STR "stunnel " STUNNEL_VERSION " for " HOST " \0"
 
-    tstr=str2tstr(line);
-    RETAILMSG(TRUE, (TEXT("%s\r\n"), tstr));
-    free(tstr);
-}
-
-void exit_win32(int exit_code) {
-    exit(exit_code);
-}
-
-int passwd_cb(char *buf, int size, int rwflag, void *userdata) {
-    return 0; /* not implemented */
-}
-
-#ifdef HAVE_OSSL_ENGINE_H
-int pin_cb(UI *ui, UI_STRING *uis) {
-    return 0; /* not implemented */
-}
+/* some useful tricks for preprocessing debugging */
+#if 0
+#pragma message ( "VERSION.H: STUNNEL_VERSION_STR is " STUNNEL_VERSION_STR )
+#pragma message ( "VERSION.H: HOST is " HOST )
+#pragma message ( "VERSION.H: STUNNEL_PRODUCTNAME_STR is " STUNNEL_PRODUCTNAME_STR )
 #endif
 
-/* end of nogui.c */
+#endif
+
+/* end of version.h */
