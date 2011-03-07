@@ -272,6 +272,104 @@ static void init_remote(CLI *c) {
         longjmp(c->err, 1);
 }
 
+static char *get_cfg_name(CLI *c) {
+    char *cfg_addr, *port;
+    cfg_addr = strdup(c->opt->remote_address);
+    if(!cfg_addr) return(0);
+    port = strrchr(cfg_addr, ':');
+    if(port)
+        *port++ = '\0';
+
+    return(cfg_addr);
+}
+
+static int verify_cert_hostname(X509 *cert, const char *hostname) {
+    int ok = 0;
+
+    { // check against subjectAltName
+        GENERAL_NAMES *subjectAltNames;
+        int i;
+
+        if(subjectAltNames = X509_get_ext_d2i(cert, NID_subject_alt_name, 0, 0)) {
+            for(i = 0; !ok && i < sk_GENERAL_NAME_num(subjectAltNames); ++i) {
+                GENERAL_NAME *name;
+                unsigned char *dns;
+                int dnsLen;
+
+                name = sk_GENERAL_NAME_value(subjectAltNames, i);
+                if(name->type != GEN_DNS) continue;
+                dnsLen = ASN1_STRING_to_UTF8(&dns, name->d.dNSName);
+
+                s_log(LOG_INFO, "Post check: subjectAltName: \"%s\","
+                    "length: %d, strlen: %d", dns, dnsLen, strlen(dns));
+
+                if(strlen(hostname) == dnsLen)
+                    if(!strcasecmp(dns, hostname)) ok = 1;
+
+                OPENSSL_free(dns);
+            }
+        }
+    }
+
+    { // check against CommonName
+        X509_NAME *subj;
+        int cnIdx;
+
+        if(!ok
+            && (subj = X509_get_subject_name(cert))
+            && (-1 != (cnIdx = X509_NAME_get_index_by_NID(subj, NID_commonName, -1)))) {
+            X509_NAME_ENTRY *cnEntry;
+            ASN1_STRING *cnASN1;
+            int cnLen;
+            unsigned char *cn;
+
+            cnEntry = X509_NAME_get_entry(subj, cnIdx);
+            cnASN1 = X509_NAME_ENTRY_get_data(cnEntry);
+            cnLen = ASN1_STRING_to_UTF8(&cn, cnASN1);
+
+            s_log(LOG_INFO, "Post check: commonName: \"%s\","
+                "length: %d, strlen: %d", cn, cnLen, strlen(cn));
+
+            /* only if the lengths are equal do we need to perform a comparison,
+             * also, if there are embedded NULLs in cn then cnLen > strlen(cn) */
+            if(strlen(hostname) == cnLen)
+                if(!strcasecmp(cn, hostname)) ok = 1;
+            OPENSSL_free(cn);
+        }
+
+        return ok;
+    }
+}
+
+static int post_connection_check(CLI *c) {
+    int ok = 0;
+    char *cfg_name = 0;
+    X509 *cert = 0;
+
+    if(c->opt->verify_level <= SSL_VERIFY_PEER) {
+        s_log(LOG_INFO, "Post check: verification level is low, skipping check");
+        return X509_V_OK;
+    }
+
+    if(!(cert = SSL_get_peer_certificate(c->ssl))) {
+        s_log(LOG_INFO, "Post check: No peer certificate!");
+        return X509_V_ERR_APPLICATION_VERIFICATION;
+    }
+
+    cfg_name = get_cfg_name(c);
+    s_log(LOG_INFO, "Post check: Config hostname: %s", cfg_name);
+    if(cfg_name && verify_cert_hostname(cert, cfg_name))
+        ok = 1;
+
+    if(cfg_name) free(cfg_name);
+    X509_free(cert);
+
+    if(ok)
+        return SSL_get_verify_result(c->ssl);
+    else
+        return X509_V_ERR_APPLICATION_VERIFICATION;
+}
+
 static void init_ssl(CLI *c) {
     int i, err;
     SSL_SESSION *old_session;
@@ -320,8 +418,13 @@ static void init_ssl(CLI *c) {
         else
             i=SSL_accept(c->ssl);
         err=SSL_get_error(c->ssl, i);
-        if(err==SSL_ERROR_NONE)
+        if(err==SSL_ERROR_NONE) {
+            if(post_connection_check(c) != X509_V_OK) {
+                s_log(LOG_NOTICE, "Post connection cert verification failed");
+                longjmp(c->err, 1); // bail
+            }
             break; /* ok -> done */
+        }
         if(err==SSL_ERROR_WANT_READ || err==SSL_ERROR_WANT_WRITE) {
             s_poll_zero(&c->fds);
             s_poll_add(&c->fds, c->ssl_rfd->fd,

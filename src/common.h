@@ -293,6 +293,8 @@ extern char *sys_errlist[];
 #include <openssl/err.h>
 #include <openssl/crypto.h> /* for CRYPTO_* and SSLeay_version */
 #include <openssl/rand.h>
+#include <openssl/conf.h>
+#include <openssl/x509v3.h>
 #ifdef HAVE_OSSL_ENGINE_H
 #include <openssl/engine.h>
 #endif
