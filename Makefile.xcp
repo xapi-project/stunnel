@@ -8,6 +8,6 @@ stunnel.spec: stunnel.spec.in
 	sed -e 's/@RPM_VERSION@/$(RPM_VERSION)/g' > $@
 
 srpm: stunnel.spec
-	git archive --prefix=stunnel-${VERSION}/ --format=tar HEAD | gzip -c > ${RPM_SOURCESDIR}/stunnel-${VERSION}.tar.gz
+	git archive --prefix=stunnel-${RPM_VERSION}/ --format=tar HEAD | gzip -c > ${RPM_SOURCESDIR}/stunnel-${RPM_VERSION}.tar.gz
 	rpmbuild -bs --nodeps --define "_sourcedir ${RPM_SOURCESDIR}" --define "_srcrpmdir ${RPM_SRPMSDIR}" stunnel.spec
 
