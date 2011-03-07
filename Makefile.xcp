@@ -1,19 +1,13 @@
-V = 4.15
+RPM_VERSION = 4.15
 
-RPM_SOURCEDIR?=/usr/src/redhat/SOURCES
-RPM_RELEASE=$(call git rev-list HEAD | wc -l)
-.PHONY: version.inc 
-version.inc:
-	echo -n 'RPM_RELEASE=' > $@
-	git rev-list HEAD | wc -l >> $@
-	echo -n 'RPM_VERSION=' >> $@
-	echo '${V}' >> $@
-include version.inc
-stunnel.spec: stunnel.spec.in version.inc
-	sed -e 's/@RPM_RELEASE@/$(RPM_RELEASE)/g' $< | \
-	sed -e 's/@RPM_VERSION@/$(V)/g' > $@
+RPM_SOURCESDIR ?= /usr/src/redhat/SOURCES
+RPM_SRPMSDIR ?= /usr/src/redhat/SRPMS
 
-srpm: stunnel.spec version.inc
-	git archive --prefix=stunnel-${V}/ --format=tar HEAD | gzip -c > $(RPM_SOURCEDIR)/stunnel-${V}.tar.gz
-	rpmbuild -bs --nodeps stunnel.spec
+stunnel.spec: stunnel.spec.in
+	sed -e 's/@RPM_RELEASE@/$(shell git rev-list HEAD | wc -l)/g' $< | \
+	sed -e 's/@RPM_VERSION@/$(RPM_VERSION)/g' > $@
+
+srpm: stunnel.spec
+	git archive --prefix=stunnel-${VERSION}/ --format=tar HEAD | gzip -c > ${RPM_SOURCESDIR}/stunnel-${VERSION}.tar.gz
+	rpmbuild -bs --nodeps --define "_sourcedir ${RPM_SOURCESDIR}" --define "_srcrpmdir ${RPM_SRPMSDIR}" stunnel.spec
 
