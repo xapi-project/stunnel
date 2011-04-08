@@ -15,7 +15,8 @@ build: $(MY_OUTPUT_DIR)/SRPMS
 	mkdir -p $(MY_OUTPUT_DIR)/RPMS/$(DOMAIN0_ARCH_OPTIMIZED)
 	$(RPMBUILD) --rebuild --target $(DOMAIN0_ARCH_OPTIMIZED) $(MY_OUTPUT_DIR)/SRPMS/stunnel-*.src.rpm
 	mkdir -p $(MY_MAIN_PACKAGES)
-	cp $(MY_OUTPUT_DIR)/RPMS/$(DOMAIN0_ARCH_OPTIMIZED)/stunnel*.rpm $(MY_MAIN_PACKAGES)
+	# Deliberately omit the debuginfo package (stunnel-debuginfo-4...)
+	cp $(MY_OUTPUT_DIR)/RPMS/$(DOMAIN0_ARCH_OPTIMIZED)/stunnel-4*.rpm $(MY_MAIN_PACKAGES)
 
 $(MY_SOURCES)/MANIFEST: $(MY_OUTPUT_DIR)/SRPMS
 	rm -f $@
