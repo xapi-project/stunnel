@@ -11,7 +11,7 @@ $(MY_OUTPUT_DIR)/SRPMS:
 	mkdir -p $(MY_OUTPUT_DIR)/SRPMS
 	$(MAKE) RPM_SOURCESDIR=$(RPM_SOURCESDIR) RPM_SRPMSDIR=$(RPM_SRPMSDIR) -C $(REPO) -f Makefile.xcp srpm
 
-build: $(MY_OUTPUT_DIR)/SRPMS
+build: $(MY_SOURCES)/MANIFEST $(MY_OUTPUT_DIR)/SRPMS
 	mkdir -p $(MY_OUTPUT_DIR)/RPMS/$(DOMAIN0_ARCH_OPTIMIZED)
 	$(RPMBUILD) --rebuild --target $(DOMAIN0_ARCH_OPTIMIZED) $(MY_OUTPUT_DIR)/SRPMS/stunnel-*.src.rpm
 	mkdir -p $(MY_MAIN_PACKAGES)
@@ -21,7 +21,7 @@ build: $(MY_OUTPUT_DIR)/SRPMS
 $(MY_SOURCES)/MANIFEST: $(MY_OUTPUT_DIR)/SRPMS
 	rm -f $@
 	mkdir -p $(MY_SOURCES)
-	/bin/sh ./srpms-to-manifest api $(MY_OUTPUT_DIR)/SRPMS > $@
+	/bin/sh ./srpms-to-manifest stunnel $(MY_OUTPUT_DIR)/SRPMS > $@
 
 .PHONY: clean
 clean:
