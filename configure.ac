@@ -298,7 +298,7 @@ AC_ARG_ENABLE(libwrap,
                 [[hosts_access()]]
             )],
             [AC_MSG_RESULT([yes]); AC_DEFINE(HAVE_LIBWRAP)],
-            [AC_MSG_RESULT([no]), LIBS="$saved_LIBS"]
+            [AC_MSG_RESULT([no]); LIBS="$saved_LIBS"]
         )
     ]
 )

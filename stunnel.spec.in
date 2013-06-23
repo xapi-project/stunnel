@@ -26,7 +26,7 @@ iconv -f iso-8859-2 -t utf-8 < doc/stunnel.pl.8 > doc/stunnel.pl.8_
 mv doc/stunnel.pl.8_ doc/stunnel.pl.8
 
 %build
-autoreconf -f # For stunnel-4.15-nogroup.patch
+autoreconf -if # For stunnel-4.15-nogroup.patch
 CFLAGS="$RPM_OPT_FLAGS -fPIC"; export CFLAGS
 if pkg-config openssl ; then
 	CFLAGS="$CFLAGS `pkg-config --cflags openssl`";
