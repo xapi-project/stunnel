@@ -363,24 +363,24 @@ static int verify_callback(int preverify_ok, X509_STORE_CTX *callback_ctx) {
         SSL_get_ex_data_X509_STORE_CTX_idx());
     c=SSL_get_ex_data(ssl, cli_index);
 
-    X509_NAME_oneline(X509_get_subject_name(callback_ctx->current_cert),
+    X509_NAME_oneline(X509_get_subject_name(X509_STORE_CTX_get_current_cert(callback_ctx)),
         txt, STRLEN);
     safestring(txt);
     if(c->opt->verify_level==SSL_VERIFY_NONE) {
         s_log(LOG_NOTICE, "VERIFY IGNORE: depth=%d, %s",
-            callback_ctx->error_depth, txt);
+            X509_STORE_CTX_get_error_depth(callback_ctx), txt);
         return 1; /* Accept connection */
     }
     if(!preverify_ok) {
         /* Remote site specified a certificate, but it's not correct */
         s_log(LOG_WARNING, "VERIFY ERROR: depth=%d, error=%s: %s",
-            callback_ctx->error_depth,
-            X509_verify_cert_error_string (callback_ctx->error), txt);
+            X509_STORE_CTX_get_error_depth(callback_ctx),
+            X509_verify_cert_error_string (X509_STORE_CTX_get_error(callback_ctx)), txt);
         return 0; /* Reject connection */
     }
-    if(c->opt->verify_use_only_my && callback_ctx->error_depth==0 &&
+    if(c->opt->verify_use_only_my && X509_STORE_CTX_get_error_depth(callback_ctx)==0 &&
             X509_STORE_get_by_subject(callback_ctx, X509_LU_X509,
-                X509_get_subject_name(callback_ctx->current_cert), &ret)!=1) {
+                X509_get_subject_name(X509_STORE_CTX_get_current_cert(callback_ctx)), &ret)!=1) {
         s_log(LOG_WARNING, "VERIFY ERROR ONLY MY: no cert for %s", txt);
         return 0; /* Reject connection */
     }
@@ -388,7 +388,7 @@ static int verify_callback(int preverify_ok, X509_STORE_CTX *callback_ctx) {
         return 0; /* Reject connection */
     /* errnum=X509_STORE_CTX_get_error(ctx); */
 
-    s_log(LOG_NOTICE, "VERIFY OK: depth=%d, %s", callback_ctx->error_depth, txt);
+    s_log(LOG_NOTICE, "VERIFY OK: depth=%d, %s", X509_STORE_CTX_get_error_depth(callback_ctx), txt);
     return 1; /* Accept connection */
 }
 
